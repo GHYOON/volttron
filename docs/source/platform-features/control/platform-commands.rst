@@ -5,8 +5,8 @@ Platform Commands
 =================
 
 VOLTTRON files for a platform instance are stored under a single directory known as the VOLTTRON home.  This home
-directory is set via the `VOLTTRON_HOME` environment variable and defaults to ``~/.volttron``.  Multiple instances of
-the platform may exist under the same account on a system by setting the `VOLTTRON_HOME` environment variable
+directory is set via the :term:`VOLTTRON_HOME` environment variable and defaults to ``~/.volttron``.  Multiple instances
+of the platform may exist under the same account on a system by setting the `VOLTTRON_HOME` environment variable
 appropriately before executing VOLTTRON commands.
 
 VOLTTRON's configuration file uses a modified INI format where section names are command names for which the settings in
@@ -28,12 +28,15 @@ will be created in `$VOLTTRON_HOME/config`.  The following is an example configu
     bind-web-address = https://<hostname>:8443
     volttron-central-address = https://<hostname>:8443
 
-where 
-**message-bus** - Indicates message bus to be used. Valid values are ``zmq`` and ``rmq``
-**instance-name** - Name of the VOLTTRON instance. This has to be unique if multiple instances need to be connected together
-**vip-address** - VIP address of the VOLTTRON instance. It contains the IP address and port number (default port number is 22916)
-**bind-web-address** - Optional parameter, only needed if VOLTTRON instance needs a web interface
-**volttron-central-address** - Optional parameter. Web address of VOLTTRON Central agent
+where:
+
+* **message-bus** - Indicates message bus to be used. Valid values are ``zmq`` and ``rmq``
+* **instance-name** - Name of the VOLTTRON instance. This has to be unique if multiple instances need to be connected
+  together
+* **vip-address** - :term:`VIP address` of the VOLTTRON instance. It contains the IP address and port number (default
+  port number is 22916)
+* **bind-web-address** - Optional parameter, only needed if VOLTTRON instance needs a web interface
+* **volttron-central-address** - Optional parameter. Web address of VOLTTRON Central agent
 
 .. note::
 
@@ -133,7 +136,7 @@ convention.
 
 .. warning::
 
-    `vctl` creates a special temporary agent to communicate with the platform with a specific VIP IDENTITY, thus
+    `vctl` creates a special temporary agent to communicate with the platform with a specific :term:`VIP Identity`, thus
     multiple instances of `vctl` cannot run at the same time.  Attempting to do so will result in a conflicting
     identity error.
 
@@ -160,12 +163,12 @@ vctl Optional Arguments
 Commands
 --------
 
-- **install** - install an agent from wheel
+- **install** - install an agent from wheel or from an agent package directory
 
     .. note::
 
-       Does *NOT* package agents similarly to the `scripts/install-agent.py` script; installs agents from wheel files
-       only
+        If --agent-config is not specified then a default config, config.json or config.yml file in the agent
+        directory will be used as configuration.  If none present then no configuration file will be loaded.
 
 - **tag AGENT TAG** - set, show, or remove agent tag for a particular agent
 - **remove AGENT** - disconnect specified agent from the platform and remove its installed agent package from `VOLTTRON_HOME`
@@ -322,7 +325,7 @@ vcfg Optional Arguments
 
      Agents available to configure:
         listener
-        master_driver
+        platform_driver
         platform_historian
         vc
         vcp

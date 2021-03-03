@@ -67,7 +67,7 @@ from volttron.platform import jsonapi
 from volttron.platform.jsonrpc import MethodNotFound
 from volttron.platform.agent import utils
 from volttron.platform.agent.known_identities import CONTROL_CONNECTION, \
-    CONFIGURATION_STORE, PLATFORM_HEALTH
+    CONFIGURATION_STORE, PLATFORM_HEALTH, AUTH
 from volttron.platform.auth import AuthEntry, AuthFile, AuthException
 from volttron.platform.certs import Certs
 from volttron.platform.jsonrpc import RemoteError
@@ -81,6 +81,7 @@ from volttron.utils.rmq_config_params import RMQConfig
 from volttron.utils.rmq_mgmt import RabbitMQMgmt
 from volttron.utils.rmq_setup import check_rabbit_status
 from volttron.platform.agent.utils import is_secure_mode, wait_for_volttron_shutdown
+from . install_agents import add_install_agent_parser, install_agent
 
 try:
     import volttron.restricted
@@ -530,11 +531,18 @@ def filter_agents(agents, patterns, opts):
     for pattern in patterns:
         regex, _ = escape(pattern)
         result = set()
+
+        # if no option is selected, try matching based on uuid
         if not (by_uuid or by_name or by_tag):
             reobj = re.compile(regex)
             matches = [agent for agent in agents if reobj.match(agent.uuid)]
             if len(matches) == 1:
                 result.update(matches)
+            # if no match is found based on uuid, try matching on agent name
+            elif len(matches) == 0:
+                matches = [agent for agent in agents if reobj.match(agent.name)]
+                if len(matches) >= 1:
+                    result.update(matches)
         else:
             reobj = re.compile(regex + '$')
             if by_uuid:
@@ -610,85 +618,6 @@ def upgrade_agent(opts):
 
     install_agent(opts, publickey=publickey, secretkey=secretkey,
                   callback=restore_agents_data)
-
-
-def install_agent(opts, publickey=None, secretkey=None, callback=None):
-    aip = opts.aip
-    filename = opts.wheel
-    tag = opts.tag
-    vip_identity = opts.vip_identity
-    if opts.vip_address.startswith('ipc://'):
-        _log.info("Installing wheel locally without channel subsystem")
-        filename = config.expandall(filename)
-        agent_uuid = opts.connection.call('install_agent_local',
-                                          filename,
-                                          vip_identity=vip_identity,
-                                          publickey=publickey,
-                                          secretkey=secretkey)
-
-        if tag:
-            opts.connection.call('tag_agent', agent_uuid, tag)
-
-    else:
-        try:
-            _log.debug('Creating channel for sending the agent.')
-            channel_name = str(uuid.uuid4())
-            channel = opts.connection.server.vip.channel('control',
-                                                         channel_name)
-            _log.debug('calling control install agent.')
-            agent_uuid = opts.connection.call_no_get('install_agent',
-                                                     filename,
-                                                     channel_name,
-                                                     vip_identity=vip_identity,
-                                                     publickey=publickey,
-                                                     secretkey=secretkey)
-
-            _log.debug('Sending wheel to control')
-            sha512 = hashlib.sha512()
-            with open(filename, 'rb') as wheel_file_data:
-                while True:
-                    # get a request
-                    with gevent.Timeout(60):
-                        request, file_offset, chunk_size = channel.recv_multipart()
-                    if request == 'checksum':
-                        channel.send(sha512.digest())
-                        break
-
-                    assert request == 'fetch'
-
-                    # send a chunk of the file
-                    file_offset = int(file_offset)
-                    chunk_size = int(chunk_size)
-                    wheel_file_data.seek(file_offset)
-                    data = wheel_file_data.read(chunk_size)
-                    sha512.update(data)
-                    channel.send(data)
-
-            agent_uuid = agent_uuid.get(timeout=10)
-
-        except Exception as exc:
-            if opts.debug:
-                traceback.print_exc()
-            _stderr.write(
-                '{}: error: {}: {}\n'.format(opts.command, exc, filename))
-            return 10
-        else:
-            if tag:
-                opts.connection.call('tag_agent',
-                                     agent_uuid,
-                                     tag)
-        finally:
-            _log.debug('closing channel')
-            channel.close(linger=0)
-            del channel
-
-    name = opts.connection.call('agent_name', agent_uuid)
-    _stdout.write('Installed {} as {} {}\n'.format(filename, agent_uuid, name))
-
-    # Need to use a callback here rather than a return value.  I am not 100%
-    # sure why this is the reason for allowing our tests to pass.
-    if callback:
-        callback(agent_uuid)
 
 
 def tag_agent(opts):
@@ -910,6 +839,131 @@ def list_agent_rpc_code(opts):
                 print(e)
     print_rpc_methods(opts, peer_method_metadata, code=True)
 
+
+def list_remotes(opts):
+    """ Lists remote certs and credentials.
+    Can be filters using the '--status' option, specifying
+    pending, approved, or denied.
+    The output printed includes:
+        user id of a ZMQ credential, or the common name of a CSR
+        remote address of the credential or csr
+        status of the credential or cert (either APPROVED, DENIED, or PENDING)
+
+     """
+    conn = opts.connection
+    if not conn:
+        _stderr.write("VOLTTRON is not running. This command "
+                      "requires VOLTTRON platform to be running\n")
+        return
+
+    output_view = []
+    try:
+        pending_csrs = conn.server.vip.rpc.call(AUTH, "get_pending_csrs").get(timeout=4)
+        for csr in pending_csrs:
+            output_view.append({"entry": {"user_id": csr["identity"],
+                                          "address": csr["remote_ip_address"]},
+                                "status": csr["status"]
+                                })
+    except TimeoutError:
+        print("Certs timed out")
+    try:
+        approved_certs = conn.server.vip.rpc.call(AUTH, "get_authorization_approved").get(timeout=4)
+        for value in approved_certs:
+            output_view.append({"entry": value, "status": "APPROVED"})
+    except TimeoutError:
+        print("Approved credentials timed out")
+    try:
+        denied_certs = conn.server.vip.rpc.call(AUTH, "get_authorization_denied").get(timeout=4)
+        for value in denied_certs:
+            output_view.append({"entry": value, "status": "DENIED"})
+    except TimeoutError:
+        print("Denied credentials timed out")
+    try:
+        pending_certs = conn.server.vip.rpc.call(AUTH, "get_authorization_pending").get(timeout=4)
+        for value in pending_certs:
+            output_view.append({"entry": value, "status": "PENDING"})
+    except TimeoutError:
+        print("Pending credentials timed out")
+
+    if not output_view:
+        print("No remote certificates or credentials")
+        return
+
+    if opts.status == "approved":
+        output_view = [output for output in output_view if output["status"] == "APPROVED"]
+
+    elif opts.status == "denied":
+        output_view = [output for output in output_view if output["status"] == "DENIED"]
+
+    elif opts.status == "pending":
+        output_view = [output for output in output_view if output["status"] == "PENDING"]
+
+    elif opts.status is not None:
+        _stdout.write("Invalid parameter. Please use 'approved', 'denied', 'pending', or leave blank to list all.\n")
+        return
+
+    if len(output_view) == 0:
+        print(f"No {opts.status} remote certificates or credentials")
+        return
+
+    for output in output_view:
+        for value in output["entry"]:
+            if not output["entry"][value]:
+                output["entry"][value] = "-"
+
+    userid_width = max(5, max(len(str(output["entry"]["user_id"])) for output in output_view))
+    address_width = max(5, max(len(str(output["entry"]["address"])) for output in output_view))
+    status_width = max(5, max(len(str(output["status"])) for output in output_view))
+    fmt = '{:{}} {:{}} {:{}}\n'
+    _stderr.write(
+        fmt.format('USER_ID', userid_width,
+                   'ADDRESS', address_width,
+                   'STATUS', status_width))
+    fmt = '{:{}} {:{}} {:{}}\n'
+    for output in output_view:
+        _stdout.write(fmt.format(output["entry"]["user_id"], userid_width,
+                                 output["entry"]["address"], address_width,
+                                 output["status"], status_width))
+
+def approve_remote(opts):
+    """Approves either a pending CSR or ZMQ credential.
+    The platform must be running for this command to succeed.
+    :param opts.user_id: The ZMQ credential user_id or pending CSR common name
+    :type opts.user_id: str
+    """
+    conn = opts.connection
+    if not conn:
+        _stderr.write("VOLTTRON is not running. This command "
+                      "requires VOLTTRON platform to be running\n")
+        return
+    conn.server.vip.rpc.call(AUTH, "approve_authorization_failure", opts.user_id).get(timeout=4)
+
+def deny_remote(opts):
+    """Denies either a pending CSR or ZMQ credential.
+        The platform must be running for this command to succeed.
+        :param opts.user_id: The ZMQ credential user_id or pending CSR common name
+        :type opts.user_id: str
+    """
+    conn = opts.connection
+    if not conn:
+        _stderr.write("VOLTTRON is not running. This command "
+                      "requires VOLTTRON platform to be running\n")
+        return
+    conn.server.vip.rpc.call(AUTH, "deny_authorization_failure", opts.user_id).get(timeout=4)
+
+
+def delete_remote(opts):
+    """Deletes either a pending CSR or ZMQ credential.
+        The platform must be running for this command to succeed.
+        :param opts.user_id: The ZMQ credential user_id or pending CSR common name
+        :type opts.user_id: str
+    """
+    conn = opts.connection
+    if not conn:
+        _stderr.write("VOLTTRON is not running. This command "
+                      "requires VOLTTRON platform to be running\n")
+        return
+    conn.server.vip.rpc.call(AUTH, "delete_authorization_failure", opts.user_id).get(timeout=4)
 
 # the following global variables are used to update the cache so
 # that we don't ask the platform too many times for the data
@@ -1459,7 +1513,7 @@ def update_auth(opts):
 
 def add_role(opts):
     auth_file = _get_auth_file(opts.volttron_home)
-    roles = auth_file.read()[2]
+    roles = auth_file.read()[3]
     if opts.role in roles:
         _stderr.write('role "{}" already exists\n'.format(opts.role))
         return
@@ -1470,13 +1524,13 @@ def add_role(opts):
 
 def list_roles(opts):
     auth_file = _get_auth_file(opts.volttron_home)
-    roles = auth_file.read()[2]
+    roles = auth_file.read()[3]
     _print_two_columns(roles, 'ROLE', 'CAPABILITIES')
 
 
 def update_role(opts):
     auth_file = _get_auth_file(opts.volttron_home)
-    roles = auth_file.read()[2]
+    roles = auth_file.read()[3]
     if opts.role not in roles:
         _stderr.write('role "{}" does not exist\n'.format(opts.role))
         return
@@ -1491,7 +1545,7 @@ def update_role(opts):
 
 def remove_role(opts):
     auth_file = _get_auth_file(opts.volttron_home)
-    roles = auth_file.read()[2]
+    roles = auth_file.read()[3]
     if opts.role not in roles:
         _stderr.write('role "{}" does not exist\n'.format(opts.role))
         return
@@ -1502,7 +1556,7 @@ def remove_role(opts):
 
 def add_group(opts):
     auth_file = _get_auth_file(opts.volttron_home)
-    groups = auth_file.read()[1]
+    groups = auth_file.read()[2]
     if opts.group in groups:
         _stderr.write('group "{}" already exists\n'.format(opts.group))
         return
@@ -1513,13 +1567,13 @@ def add_group(opts):
 
 def list_groups(opts):
     auth_file = _get_auth_file(opts.volttron_home)
-    groups = auth_file.read()[1]
+    groups = auth_file.read()[2]
     _print_two_columns(groups, 'GROUPS', 'ROLES')
 
 
 def update_group(opts):
     auth_file = _get_auth_file(opts.volttron_home)
-    groups = auth_file.read()[1]
+    groups = auth_file.read()[2]
     if opts.group not in groups:
         _stderr.write('group "{}" does not exist\n'.format(opts.group))
         return
@@ -1534,7 +1588,7 @@ def update_group(opts):
 
 def remove_group(opts):
     auth_file = _get_auth_file(opts.volttron_home)
-    groups = auth_file.read()[1]
+    groups = auth_file.read()[2]
     if opts.group not in groups:
         _stderr.write('group "{}" does not exist\n'.format(opts.group))
         return
@@ -1701,7 +1755,8 @@ def _show_filtered_agents_status(opts, status_callback, health_callback, agents=
                 'health': health_callback(agent),
             }
             if is_secure_mode():
-                json_obj[agent.vip_identity]['agent_user'] = agent_user if json_obj[agent.vip_identity]['status'].startswith('running') else ''
+                json_obj[agent.vip_identity]['agent_user'] = agent.agent_user if \
+                    json_obj[agent.vip_identity]['status'].startswith('running') else ''
         _stdout.write(f'{jsonapi.dumps(json_obj, indent=2)}\n')
 
 
@@ -2381,29 +2436,14 @@ def main(argv=sys.argv):
     top_level_subparsers = parser.add_subparsers(title='commands', metavar='',
                                                  dest='command')
 
-    def add_parser(*args, **kwargs):
+    def add_parser(*args, **kwargs) -> argparse.ArgumentParser:
         parents = kwargs.get('parents', [])
         parents.append(global_args)
         kwargs['parents'] = parents
         subparser = kwargs.pop("subparser", top_level_subparsers)
         return subparser.add_parser(*args, **kwargs)
 
-    install = add_parser('install', help='install agent from wheel',
-                         epilog='Optionally you may specify the --tag argument to tag the '
-                                'agent during install without requiring a separate call to '
-                                'the tag command. ')
-    install.add_argument('wheel', help='path to agent wheel')
-    install.add_argument('--tag', help='tag for the installed agent')
-    install.add_argument('--vip-identity', help='VIP IDENTITY for the installed agent. '
-                                                'Overrides any previously configured VIP IDENTITY.')
-    if HAVE_RESTRICTED:
-        install.add_argument('--verify', action='store_true',
-                             dest='verify_agents',
-                             help='verify agent integrity during install')
-        install.add_argument('--no-verify', action='store_false',
-                             dest='verify_agents',
-                             help=argparse.SUPPRESS)
-    install.set_defaults(func=install_agent, verify_agents=True)
+    add_install_agent_parser(add_parser, HAVE_RESTRICTED)
 
     tag = add_parser('tag', parents=[filterable],
                      help='set, show, or remove agent tag')
@@ -2709,6 +2749,34 @@ def main(argv=sys.argv):
                                   help='remove (rather than append) given capabilities')
     auth_update_role.set_defaults(func=update_role)
 
+    auth_remote = add_parser('remote', subparser=auth_subparsers,
+                             help="manage pending RMQ certs and ZMQ credentials")
+    auth_remote_subparsers = auth_remote.add_subparsers(title='remote subcommands', metavar='', dest='store_commands')
+
+    auth_remote_list_cmd = add_parser("list", subparser=auth_remote_subparsers,
+                                      help="lists approved, denied, and pending certs and credentials"
+                            )
+    auth_remote_list_cmd.add_argument("--status", help="Specify approved, denied, or pending")
+    auth_remote_list_cmd.set_defaults(func=list_remotes)
+
+    auth_remote_approve_cmd = add_parser("approve", subparser=auth_remote_subparsers,
+                                         help="approves pending or denied remote connection")
+    auth_remote_approve_cmd.add_argument("user_id", help="user_id or identity of pending credential or cert to approve")
+    auth_remote_approve_cmd.set_defaults(func=approve_remote)
+
+    auth_remote_deny_cmd = add_parser("deny", subparser=auth_remote_subparsers,
+                                      help="denies pending or denied remote connection")
+    auth_remote_deny_cmd.add_argument("user_id",
+                                      help="user_id or identity of pending credential or cert to deny")
+    auth_remote_deny_cmd.set_defaults(func=deny_remote)
+
+    auth_remote_delete_cmd = add_parser("delete", subparser=auth_remote_subparsers,
+                                         help="approves pending or denied remote connection")
+    auth_remote_delete_cmd.add_argument("user_id",
+                                         help="user_id or identity of pending credential or cert to delete")
+    auth_remote_delete_cmd.set_defaults(func=delete_remote)
+
+
     # ====================================================
     # config commands
     # ====================================================
@@ -2992,7 +3060,10 @@ def main(argv=sys.argv):
 
     opts.aip = aipmod.AIPplatform(opts)
     opts.aip.setup()
-    opts.connection = ControlConnection(opts.vip_address)
+
+    opts.connection = None
+    if utils.is_volttron_running(volttron_home):
+        opts.connection = ControlConnection(opts.vip_address)
 
     try:
         with gevent.Timeout(opts.timeout):
@@ -3007,11 +3078,27 @@ def main(argv=sys.argv):
         _stderr.write("Invalid command: '{}' or command requires additional arguments\n".format(opts.command))
         parser.print_help()
         return 1
-    # except Exception as exc:
-    #     print_tb = traceback.print_exc
-    #     error = str(exc)
-    else:
-        return 0
+    except SystemExit as exc:
+        # Handles if sys.exit is called from within a function if not 0
+        # then we know there was an error and processing will continue
+        # else we return 0 from here.  This has the added effect of
+        # allowing us to cascade short circuit calls.
+        if exc.args[0] != 0:
+            print_tb = exc.print_tb
+            error = exc.message
+        else:
+            return 0
+    finally:
+        # make sure the connection to the server is closed when this scriopt is about to exit.
+        if opts.connection:
+            try:
+                opts.connection.server.core.stop()
+            except Unreachable:
+                # its ok for this to fail at this point it might not even be valid.
+                pass
+            finally:
+                opts.connection = None
+
     if opts.debug:
         print_tb()
     _stderr.write('{}: error: {}\n'.format(opts.command, error))

@@ -5,8 +5,8 @@ Platform Configuration
 ======================
 
 Each instance of the VOLTTRON platform includes a `config` file which is used to configure the platform instance on
-startup.  This file is kept in `VOLTTRON_HOME` and is created using the `volttron-cfg` (`vcfg`) command, or will be
-created with default values on start up of the platform otherwise.
+startup.  This file is kept in :term:`VOLTTRON_HOME` and is created using the `volttron-cfg` (`vcfg`) command, or will
+be created with default values on start up of the platform otherwise.
 
 Following is helpful information about the `config` file and the `vcfg` command.
 
@@ -39,11 +39,10 @@ VOLTTRON Config File
 ====================
 
 The `config` file in `VOLTTRON_HOME` is the config file used by the platform.  This configuration file specifies the
-behavior of the platform at runtime, including which message bus it uses, the name of the platform instance, the address
-bound to by VIP, and so-on.  It is recommended to use the `VOLTTRON Config`_ wizard (explained below) for configuring
-an instance for the first time as it will create a thorough template unique to your deployment.  After using the wizard
-the file may be edited by the user as necessary for operations.  The following is a simple example `config` for a
-multi-platform deployment:
+behavior of the platform at runtime, including which message bus it uses, the name of the platform instance, and the
+address bound to by :term:`VIP`.  The `VOLTTRON Config`_ wizard (explained below) can be used to configure an instance
+for the first time.  The user may run the wizard again or edit the config file directly as necessary for operations.
+The following is a simple  example `config` for a multi-platform deployment:
 
 ::
 
@@ -51,8 +50,8 @@ multi-platform deployment:
     message-bus = zmq
     vip-address = tcp://127.0.0.1:22916
     bind-web-address = <web service bind address>
-    web-ssl-cert = <VOLTTRON_HOME>/certificates/certs/master_web-server.crt
-    web-ssl-key = <VOLTTRON_HOME>/certificates/private/master_web-server.pem
+    web-ssl-cert = <VOLTTRON_HOME>/certificates/certs/platform_web-server.crt
+    web-ssl-key = <VOLTTRON_HOME>/certificates/private/platform_web-server.pem
     instance-name = volttron1
     volttron-central-address = <VC address>
 
@@ -60,11 +59,15 @@ The example consists of the following entries:
 
 * **message-bus** - message bus being used for this instance (rmq/zmq)
 * **vip-address** - address bound to by VIP for message bus communication
-* **bind-web-address** - Optional, needed if platform has to support web feature. Represents address bound to by the platform web service for handling HTTP(s) requests. Typical address would be https://<hostname>:8443
-* **web-ssl-cert** - Optional, needed if platform has to support web feature. Represents path to the certificate for the instance's web service
-* **web-ssl-key** - Optional, needed if platform has to support web feature. Represents secret key or path to secret key file used by web service authenticate requests
+* **bind-web-address** - Optional, needed if platform has to support web feature. Represents address bound to by the
+  platform web service for handling HTTP(s) requests.  Typical address would be ``https://<hostname>:8443``
+* **web-ssl-cert** - Optional, needed if platform has to support web feature. Represents path to the certificate for the
+  instance's web service
+* **web-ssl-key** - Optional, needed if platform has to support web feature. Represents secret key or path to secret key
+  file used by web service authenticate requests
 * **instance-name** - name of this VOLTTRON platform instance, should be unique for the deployment
-* **volttron-central-address** - Optional, needed if instance is running Volttron Central. Represents web address of VOLTTRON Central agent managing this platform instance. Typical address would be https://<hostname>:8443
+* **volttron-central-address** - Optional, needed if instance is running Volttron Central.  Represents web address of
+  VOLTTRON Central agent managing this platform instance.  Typical address would be ``https://<hostname>:8443``
 
    
 .. _VOLTTRON-Config:
@@ -130,10 +133,10 @@ A set of example responses are included here (`username` is ``user``, `localhost
         Configuring /home/user/volttron/services/core/SQLHistorian.
         ['volttron', '-vv', '-l', '/home/user/.volttron/volttron.cfg.log']
         Should the agent autostart? [N]: y
-        Would you like to install a master driver? [N]: y
-        Configuring /home/user/volttron/services/core/MasterDriverAgent.
+        Would you like to install a platform driver? [N]: y
+        Configuring /home/user/volttron/services/core/PlatformDriverAgent.
         ['volttron', '-vv', '-l', '/home/user/.volttron/volttron.cfg.log']
-        Would you like to**install a fake device on the master driver? [N]: y
+        Would you like to**install a fake device on the platform driver? [N]: y
         Should the agent autostart? [N]: y
         Would you like to install a listener agent? [N]: y
         Configuring examples/ListenerAgent.
@@ -155,7 +158,7 @@ Optional Arguments
   - **-v, --verbose** - Enables verbose output in standard-output (PIP output, etc.)
   - **--vhome VHOME** - Provide a path to set `VOLTTRON_HOME` for this instance
   - **--instance-name INSTANCE_NAME** - Provide a name for this instance.  Required for running secure agents mode
-  - **--list-agents** - Display a list of configurable agents (Listener, Master Driver, Platform Historian, VOLTTRON
+  - **--list-agents** - Display a list of configurable agents (Listener, Platform Driver, Platform Historian, VOLTTRON
     Central, VOLTTRON Central Platform)
   - **--agent AGENT [AGENT ...]** - Configure listed agents
   - **--rabbitmq RABBITMQ [RABBITMQ ...]** - Configure rabbitmq for single instance, federation, or shovel either based

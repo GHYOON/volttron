@@ -47,7 +47,7 @@ There are nine arguments for the `driver_config` section of the device configura
     - **max_per_request** - (Optional) Configure driver to manually segment read requests. The driver will only grab up
       to the number of objects specified in this setting at most per request.  This setting is primarily for scraping
       many points off of low resource devices that do not support segmentation. Defaults to 10000
-    - **proxy_address** - (Optional) VIP address of the BACnet proxy. Defaults to "platform.bacnet_proxy". See
+    - **proxy_address** - (Optional) :term:`VIP` address of the BACnet proxy. Defaults to ``platform.bacnet_proxy``. See
       :ref:`bacnet-proxy-multiple-networks` for details.  Unless your BACnet network has special needs you should not
       change this value
     - **ping_retry_interval** - (Optional) The driver will ping the device to establish a route at startup. If the
@@ -59,7 +59,7 @@ There are nine arguments for the `driver_config` section of the device configura
       Defaults to true
     - **cov_lifetime** - (Optional) When a device establishes a change of value subscription for a point, this argument
       will be used to determine the lifetime and renewal period for the subscription, in seconds. Defaults to 180
-      (Added to Master Driver version 3.2)
+      (Added to Platform Driver version 3.2)
 
 Here is an example device configuration file:
 
@@ -127,7 +127,7 @@ The following columns are optional:
       leaving the column blank will use the default priority of 16
     - **COV Flag** - Either `True` or `False`.  Determines if a BACnet Change-of-Value subscription should be
       established for this point.  Missing this column or leaving the column blank will result in no change of value
-      subscriptions being established. (Added to Master Driver version 3.2)
+      subscriptions being established. (Added to Platform Driver version 3.2)
 
 Any additional columns will be ignored. It is common practice to include a `Point Name` or `Reference Point Name`
 column to include the device documentation's name for the point and `Notes` and `Unit Details` columns for additional

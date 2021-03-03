@@ -4,8 +4,8 @@
 Agent VIP IDENTITY Assignment Specification
 ===========================================
 
-This document explains how an agent obtains it's VIP IDENTITY, how the platform sets an agent's VIP IDENTITY at startup,
-and what mechanisms are available to the user to set the VIP IDENTITY for any agent.
+This document explains how an agent obtains it's :term:`VIP IDENTITY <VIP Identity>`, how the platform sets an agent's
+VIP IDENTITY at startup, and what mechanisms are available to the user to set the VIP IDENTITY for any agent.
 
 
 What is a VIP IDENTITY
@@ -44,7 +44,7 @@ selected automatically by the platform.  This platform chosen ID is currently no
 Agent Implementation
 ====================
 
-If an Agent has a preferred VIP IDENTITY (for example the Master Driver Agent prefers to use "platform.driver") it may
+If an Agent has a preferred VIP IDENTITY (for example the Platform Driver Agent prefers to use "platform.driver") it may
 specify this as a default packed value.  This is done by including a file named IDENTITY containing only the desired VIP
 IDENTITY in ASCII plain text in the same directory at the `setup.py` file for the Agent.  This will cause the packaged
 agent wheel to include an instruction to set the VIP IDENTITY at installation time.

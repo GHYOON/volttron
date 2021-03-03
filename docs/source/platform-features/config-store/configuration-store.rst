@@ -17,7 +17,7 @@ Each agent has it's own configuration store (or just store). Agents are not give
 
 The existence of a store is not dependent on the existence of an agent installed on the platform.
 
-Each store has a unique identity.  Stores are matched to agents at agent runtime via the agent's VIP IDENTITY.
+Each store has a unique identity.  Stores are matched to agents at agent runtime via the agent's :term:`VIP Identity`.
 Therefore the store for an agent is the store with the same identity as the agent's VIP IDENTITY.
 
 When a user updates a configuration in the store the platform immediately informs the agent of the change.  The platform
@@ -171,7 +171,7 @@ the agent considers the referring configuration as changed.  Thus a set of confi
 can be considered one large configuration broken into pieces for the users convenience.
 
 Multiple configurations may all reference a single configuration.  For instance, when configuring drivers
-in the Master Driver you may have multiple drivers reference the same registry if appropriate.
+in the Platform Driver you may have multiple drivers reference the same registry if appropriate.
 
 
 Modifying the Configuration Store
